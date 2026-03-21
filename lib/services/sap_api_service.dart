@@ -13,10 +13,10 @@ class SapApiService {
       'Basic ${base64Encode(utf8.encode('$username:$password'))}';
 
   Map<String, String> get headers => {
-    "Accept": "application/json",
-    "Content-Type": "application/json",
-    "Authorization": basicAuth,
-  };
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": basicAuth,
+      };
 
   String? _csrfToken;
   String? _cookie;
@@ -55,6 +55,7 @@ class SapApiService {
     return data['d']?['results'] ?? [];
   }
 
+  // 1. Lấy danh sách Material
   Future<List<MaterialModel>> fetchAllMaterials() async {
     final url = "${ApiConstants.baseUrl}/MaterialSet?\$format=json";
     final response = await http.get(Uri.parse(url), headers: headers);
@@ -68,15 +69,7 @@ class SapApiService {
     }
   }
 
-  Future<List<MaterialModel>> searchMaterialByMatnr(String matnr) async {
-    final all = await fetchAllMaterials();
-    final keyword = matnr.trim().toLowerCase();
-    if (keyword.isEmpty) return all;
-    return all
-        .where((item) => item.matnr.toLowerCase().contains(keyword))
-        .toList();
-  }
-
+  // 2. Tìm kiếm Stock chuẩn OData (Server-side)
   Future<List<StockModel>> fetchAllStocks({String? filter, int top = 500}) async {
     final queryParams = {
       "\$format": "json",
@@ -95,7 +88,7 @@ class SapApiService {
           .map((e) => StockModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } else {
-      throw Exception("Failed to load stocks: ${response.statusCode}\n${response.body}");
+      throw Exception("Failed to load stocks: ${response.statusCode}");
     }
   }
 
@@ -105,23 +98,15 @@ class SapApiService {
     String lgort = '',
   }) async {
     final filters = <String>[];
-
-    if (matnr.trim().isNotEmpty) {
-      filters.add("Matnr eq '${matnr.trim().toUpperCase()}'");
-    }
-    if (werks.trim().isNotEmpty) {
-      filters.add("Werks eq '${werks.trim().toUpperCase()}'");
-    }
-    if (lgort.trim().isNotEmpty) {
-      filters.add("Lgort eq '${lgort.trim().toUpperCase()}'");
-    }
+    if (matnr.trim().isNotEmpty) filters.add("Matnr eq '${matnr.trim().toUpperCase()}'");
+    if (werks.trim().isNotEmpty) filters.add("Werks eq '${werks.trim().toUpperCase()}'");
+    if (lgort.trim().isNotEmpty) filters.add("Lgort eq '${lgort.trim().toUpperCase()}'");
 
     final filterString = filters.isNotEmpty ? filters.join(" and ") : null;
-
-    // Gọi fetchAllStocks với chuỗi filter chuẩn OData
     return fetchAllStocks(filter: filterString);
   }
 
+  // 3. Nhập kho (Goods Receipt)
   Future<String?> postGoodsReceipt({
     required String matnr,
     required String werks,
@@ -129,9 +114,7 @@ class SapApiService {
     required String menge,
   }) async {
     await _fetchCsrfToken();
-    final url = Uri.parse(
-      "${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}",
-    );
+    final url = Uri.parse("${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}");
     final body = json.encode({
       "Mblnr": "",
       "Bwart": "101",
@@ -155,6 +138,7 @@ class SapApiService {
     }
   }
 
+  // 4. Xuất kho (Goods Issue)
   Future<String?> postGoodsIssue({
     required String matnr,
     required String werks,
@@ -162,9 +146,7 @@ class SapApiService {
     required String menge,
   }) async {
     await _fetchCsrfToken();
-    final url = Uri.parse(
-      "${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}",
-    );
+    final url = Uri.parse("${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}");
     final body = json.encode({
       "Mblnr": "",
       "Bwart": "201",
@@ -188,37 +170,11 @@ class SapApiService {
     }
   }
 
-  Future<bool> updateStock({
-    required String matnr,
-    required String werks,
-    required String lgort,
-    required String labst,
-  }) async {
-    await _fetchCsrfToken();
-    final url = Uri.parse(
-      "${ApiConstants.baseUrl}${ApiConstants.stockUpdateSet}"
-      "(Matnr='${matnr.trim()}',Werks='${werks.trim()}',Lgort='${lgort.trim()}')",
-    );
-    final body = json.encode({
-      "Matnr": matnr.trim(),
-      "Werks": werks.trim(),
-      "Lgort": lgort.trim(),
-      "Labst": labst.trim(),
-    });
-
-    final putHeaders = Map<String, String>.from(headers);
-    if (_csrfToken != null) putHeaders["x-csrf-token"] = _csrfToken!;
-    if (_cookie != null) putHeaders["cookie"] = _cookie!;
-
-    final response = await http.put(url, headers: putHeaders, body: body);
-    return response.statusCode == 200 || response.statusCode == 204;
-  }
-
+  // Helper để lấy lỗi từ SAP
   String _parseError(String responseBody) {
     try {
       final data = jsonDecode(responseBody);
-      return data['error']?['message']?['value'] ??
-          "Unknown SAP Error: $responseBody";
+      return data['error']?['message']?['value'] ?? responseBody;
     } catch (_) {
       return responseBody;
     }
