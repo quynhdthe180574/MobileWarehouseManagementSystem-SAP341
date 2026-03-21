@@ -11,6 +11,7 @@ class GoodsReceiptScreen extends StatefulWidget {
 
 class _GoodsReceiptScreenState extends State<GoodsReceiptScreen> {
   final SapApiService _apiService = SapApiService();
+  final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _matnrController = TextEditingController();
   final TextEditingController _werksController = TextEditingController();
@@ -29,11 +30,7 @@ class _GoodsReceiptScreenState extends State<GoodsReceiptScreen> {
   }
 
   Future<void> _submitGoodsReceipt() async {
-    if (_matnrController.text.trim().isEmpty ||
-        _werksController.text.trim().isEmpty ||
-        _lgortController.text.trim().isEmpty ||
-        _mengeController.text.trim().isEmpty) {
-      _showMessage("Vui lòng nhập đầy đủ thông tin", isError: true);
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
@@ -48,19 +45,24 @@ class _GoodsReceiptScreenState extends State<GoodsReceiptScreen> {
       );
 
       if (mblnr != null) {
-        _showMessage("Goods Receipt thành công (Mblnr = $mblnr)");
+        _showMessage(
+          mblnr.toLowerCase() == 'success'
+              ? "Nhập kho thành công!"
+              : "Nhập kho thành công! Mã: $mblnr",
+        );
         _clearForm();
       } else {
-        _showMessage("Goods Receipt thất bại", isError: true);
+        _showMessage("Nhập kho thất bại", isError: true);
       }
     } catch (e) {
-      _showMessage("Lỗi: $e", isError: true);
+      _showMessage("${e.toString().replaceAll("Exception: ", "")}", isError: true);
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
   void _clearForm() {
+    _formKey.currentState?.reset();
     _matnrController.clear();
     _werksController.clear();
     _lgortController.clear();
@@ -82,33 +84,50 @@ class _GoodsReceiptScreenState extends State<GoodsReceiptScreen> {
       appBar: AppBar(title: const Text("Nhập kho (Goods Receipt)")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _buildHeaderCard(),
-            const SizedBox(height: 16),
-            _buildTextField(_matnrController, "Material Number (Matnr)"),
-            const SizedBox(height: 12),
-            _buildTextField(_werksController, "Plant (Werks)"),
-            const SizedBox(height: 12),
-            _buildTextField(_lgortController, "Storage Location (Lgort)"),
-            const SizedBox(height: 12),
-            _buildTextField(
-              _mengeController,
-              "Quantity (Menge)",
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _submitGoodsReceipt,
-                icon: const Icon(Icons.add_box_outlined),
-                label: Text(
-                  _isLoading ? "Processing..." : "Post Goods Receipt",
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              _buildHeaderCard(),
+              const SizedBox(height: 16),
+              _buildTextFormField(
+                controller: _matnrController,
+                label: "Material Number (Matnr)",
+                hint: "Ví dụ: BTELE101",
+              ),
+              const SizedBox(height: 12),
+              _buildTextFormField(
+                controller: _werksController,
+                label: "Plant (Werks)",
+                hint: "Ví dụ: 1000",
+              ),
+              const SizedBox(height: 12),
+              _buildTextFormField(
+                controller: _lgortController,
+                label: "Storage Location (Lgort)",
+                hint: "Ví dụ: 0001",
+              ),
+              const SizedBox(height: 12),
+              _buildTextFormField(
+                controller: _mengeController,
+                label: "Quantity (Menge)",
+                hint: "Ví dụ: 100",
+                keyboardType: TextInputType.number,
+                isNumeric: true,
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : _submitGoodsReceipt,
+                  icon: const Icon(Icons.add_box_outlined),
+                  label: Text(
+                    _isLoading ? "Processing..." : "Post Goods Receipt",
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -134,18 +153,35 @@ class _GoodsReceiptScreenState extends State<GoodsReceiptScreen> {
     );
   }
 
-  Widget _buildTextField(
-    TextEditingController controller,
-    String label, {
+  Widget _buildTextFormField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
     TextInputType keyboardType = TextInputType.text,
+    bool isNumeric = false,
   }) {
-    return TextField(
+    return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.grey.withOpacity(0.05),
       ),
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) {
+          return "Trường này không được để trống";
+        }
+        if (isNumeric) {
+          final n = num.tryParse(value);
+          if (n == null || n <= 0) {
+            return "Vui lòng nhập số dương hợp lệ";
+          }
+        }
+        return null;
+      },
     );
   }
 }

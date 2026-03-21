@@ -21,6 +21,16 @@ class SapApiService {
   String? _csrfToken;
   String? _cookie;
 
+  String? _formatMatnr(String? matnr) {
+    if (matnr == null || matnr.trim().isEmpty) return matnr;
+    String trimmed = matnr.trim().toUpperCase();
+    // Nếu là số thuần túy, đệm thêm số 0 cho đủ 18 ký tự (Chuẩn SAP MATNR)
+    if (RegExp(r'^\d+$').hasMatch(trimmed)) {
+      return trimmed.padLeft(18, '0');
+    }
+    return trimmed;
+  }
+
   String? _extractCookies(String? setCookie) {
     if (setCookie == null || setCookie.isEmpty) return null;
     final parts = setCookie.split(',');
@@ -103,7 +113,7 @@ class SapApiService {
   }) async {
     final filters = <String>[];
     if (matnr.trim().isNotEmpty)
-      filters.add("Matnr eq '${matnr.trim().toUpperCase()}'");
+      filters.add("Matnr eq '${_formatMatnr(matnr)}'");
     if (werks.trim().isNotEmpty)
       filters.add("Werks eq '${werks.trim().toUpperCase()}'");
     if (lgort.trim().isNotEmpty)
@@ -127,9 +137,9 @@ class SapApiService {
     final body = json.encode({
       "Mblnr": "",
       "Bwart": "101",
-      "Matnr": matnr.trim(),
-      "Werks": werks.trim(),
-      "Lgort": lgort.trim(),
+      "Matnr": _formatMatnr(matnr),
+      "Werks": werks.trim().toUpperCase(),
+      "Lgort": lgort.trim().toUpperCase(),
       "Menge": menge.trim(),
     });
 
@@ -161,9 +171,9 @@ class SapApiService {
     final body = json.encode({
       "Mblnr": "",
       "Bwart": "201",
-      "Matnr": matnr.trim(),
-      "Werks": werks.trim(),
-      "Lgort": lgort.trim(),
+      "Matnr": _formatMatnr(matnr),
+      "Werks": werks.trim().toUpperCase(),
+      "Lgort": lgort.trim().toUpperCase(),
       "Menge": menge.trim(),
     });
 
@@ -191,12 +201,12 @@ class SapApiService {
     await _fetchCsrfToken();
     final url = Uri.parse(
       "${ApiConstants.baseUrl}${ApiConstants.stockUpdateSet}"
-      "(Matnr='${matnr.trim()}',Werks='${werks.trim()}',Lgort='${lgort.trim()}')",
+      "(Matnr='${_formatMatnr(matnr)}',Werks='${werks.trim().toUpperCase()}',Lgort='${lgort.trim().toUpperCase()}')",
     );
     final body = json.encode({
-      "Matnr": matnr.trim(),
-      "Werks": werks.trim(),
-      "Lgort": lgort.trim(),
+      "Matnr": _formatMatnr(matnr),
+      "Werks": werks.trim().toUpperCase(),
+      "Lgort": lgort.trim().toUpperCase(),
       "Labst": labst.trim(),
     });
 

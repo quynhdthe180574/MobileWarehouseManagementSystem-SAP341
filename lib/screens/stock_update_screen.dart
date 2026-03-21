@@ -54,7 +54,10 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
         _showMessage("Cập nhật tồn kho thất bại", isError: true);
       }
     } catch (e) {
-      _showMessage("Lỗi: $e", isError: true);
+      _showMessage(
+        "${e.toString().replaceAll("Exception: ", "")}",
+        isError: true,
+      );
     } finally {
       setState(() => _isLoading = false);
     }
