@@ -6,9 +6,6 @@ import '../models/material_model.dart';
 import '../models/stock_model.dart';
 
 class SapApiService {
-  // =========================
-  // Nếu SAP cần Basic Auth thì mở phần này
-  // =========================
   final String username = "dev-379";
   final String password = "03092112";
 
@@ -21,73 +18,76 @@ class SapApiService {
     "Authorization": basicAuth,
   };
 
-  // =========================
-  // Parse OData dạng:
-  // {
-  //   "d": {
-  //     "results": [ ... ]
-  //   }
-  // }
-  // =========================
+  String? _csrfToken;
+  String? _cookie;
+
+  String? _extractCookies(String? setCookie) {
+    if (setCookie == null || setCookie.isEmpty) return null;
+    final parts = setCookie.split(',');
+    final cookies = <String>[];
+    for (var part in parts) {
+      final firstSemi = part.indexOf(';');
+      final cookiePair = firstSemi == -1
+          ? part.trim()
+          : part.substring(0, firstSemi).trim();
+      if (cookiePair.isNotEmpty) {
+        cookies.add(cookiePair);
+      }
+    }
+    return cookies.isNotEmpty ? cookies.join('; ') : null;
+  }
+
+  Future<void> _fetchCsrfToken() async {
+    final url = Uri.parse("${ApiConstants.baseUrl}/?\$format=json");
+    final response = await http.get(
+      url,
+      headers: {"Authorization": basicAuth, "x-csrf-token": "fetch"},
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      _csrfToken = response.headers['x-csrf-token'];
+      _cookie = _extractCookies(response.headers['set-cookie']);
+    }
+  }
+
   List<dynamic> _parseODataResults(String responseBody) {
     final data = json.decode(responseBody);
     return data['d']?['results'] ?? [];
   }
 
-  // =========================
-  // 1) MATERIAL
-  // GET /MaterialSet
-  // =========================
   Future<List<MaterialModel>> fetchAllMaterials() async {
     final url = "${ApiConstants.baseUrl}/MaterialSet?\$format=json";
-
     final response = await http.get(Uri.parse(url), headers: headers);
 
     if (response.statusCode == 200) {
       final jsonData = jsonDecode(response.body);
       final results = jsonData['d']['results'] as List;
-
       return results.map((item) => MaterialModel.fromJson(item)).toList();
     } else {
-      throw Exception(
-        "Fetch all materials failed: ${response.statusCode}\n${response.body}",
-      );
+      throw Exception("Fetch all materials failed: ${response.statusCode}");
     }
   }
 
   Future<List<MaterialModel>> searchMaterialByMatnr(String matnr) async {
-    final encodedMatnr = matnr.trim().replaceAll("'", "''");
-
-    final url =
-        "${ApiConstants.baseUrl}/MaterialSet?\$filter=Matnr eq '$encodedMatnr'&\$format=json";
-
-    final response = await http.get(
-      Uri.parse(url),
-      headers: {"Accept": "application/json"},
-    );
-
-    if (response.statusCode == 200) {
-      final jsonData = jsonDecode(response.body);
-      final results = jsonData['d']['results'] as List;
-
-      return results.map((item) => MaterialModel.fromJson(item)).toList();
-    } else {
-      throw Exception(
-        "Search material failed: ${response.statusCode}\n${response.body}",
-      );
-    }
+    final all = await fetchAllMaterials();
+    final keyword = matnr.trim().toLowerCase();
+    if (keyword.isEmpty) return all;
+    return all
+        .where((item) => item.matnr.toLowerCase().contains(keyword))
+        .toList();
   }
 
-  // =========================
-  // 2) STOCK
-  // GET /StockSet
-  // =========================
-  Future<List<StockModel>> fetchAllStocks() async {
-    final url = Uri.parse(
-      "${ApiConstants.baseUrl}${ApiConstants.stockSet}?\$format=json",
-    );
+  Future<List<StockModel>> fetchAllStocks({String? filter, int top = 500}) async {
+    final queryParams = {
+      "\$format": "json",
+      "\$top": top.toString(),
+      if (filter != null) "\$filter": filter,
+    };
 
-    final response = await http.get(url, headers: headers);
+    final uri = Uri.parse("${ApiConstants.baseUrl}${ApiConstants.stockSet}")
+        .replace(queryParameters: queryParams);
+
+    final response = await http.get(uri, headers: headers);
 
     if (response.statusCode == 200) {
       final results = _parseODataResults(response.body);
@@ -95,9 +95,7 @@ class SapApiService {
           .map((e) => StockModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } else {
-      throw Exception(
-        "Failed to load stocks: ${response.statusCode}\n${response.body}",
-      );
+      throw Exception("Failed to load stocks: ${response.statusCode}\n${response.body}");
     }
   }
 
@@ -109,57 +107,31 @@ class SapApiService {
     final filters = <String>[];
 
     if (matnr.trim().isNotEmpty) {
-      filters.add("Matnr eq '${matnr.trim()}'");
+      filters.add("Matnr eq '${matnr.trim().toUpperCase()}'");
     }
     if (werks.trim().isNotEmpty) {
-      filters.add("Werks eq '${werks.trim()}'");
+      filters.add("Werks eq '${werks.trim().toUpperCase()}'");
     }
     if (lgort.trim().isNotEmpty) {
-      filters.add("Lgort eq '${lgort.trim()}'");
+      filters.add("Lgort eq '${lgort.trim().toUpperCase()}'");
     }
 
-    String urlString =
-        "${ApiConstants.baseUrl}${ApiConstants.stockSet}?\$format=json";
+    final filterString = filters.isNotEmpty ? filters.join(" and ") : null;
 
-    if (filters.isNotEmpty) {
-      urlString =
-          "${ApiConstants.baseUrl}${ApiConstants.stockSet}?\$filter=${filters.join(' and ')}&\$format=json";
-    }
-
-    // fix escaping for Dart string
-    urlString = urlString.replaceAll("\\\$filter", "\$filter");
-    urlString = urlString.replaceAll("\\\$format", "\$format");
-
-    final url = Uri.parse(urlString);
-    final response = await http.get(url, headers: headers);
-
-    if (response.statusCode == 200) {
-      final results = _parseODataResults(response.body);
-      return results
-          .map((e) => StockModel.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } else {
-      throw Exception(
-        "Failed to search stock: ${response.statusCode}\n${response.body}",
-      );
-    }
+    // Gọi fetchAllStocks với chuỗi filter chuẩn OData
+    return fetchAllStocks(filter: filterString);
   }
 
-  // =========================
-  // 3) GOODS RECEIPT
-  // POST /GoodsMovementSet
-  // Bwart = 101
-  // =========================
-  Future<bool> postGoodsReceipt({
+  Future<String?> postGoodsReceipt({
     required String matnr,
     required String werks,
     required String lgort,
     required String menge,
   }) async {
+    await _fetchCsrfToken();
     final url = Uri.parse(
-      "${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}?\$format=json",
+      "${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}",
     );
-
     final body = json.encode({
       "Mblnr": "",
       "Bwart": "101",
@@ -169,26 +141,30 @@ class SapApiService {
       "Menge": menge.trim(),
     });
 
-    final response = await http.post(url, headers: headers, body: body);
+    final postHeaders = Map<String, String>.from(headers);
+    if (_csrfToken != null) postHeaders["x-csrf-token"] = _csrfToken!;
+    if (_cookie != null) postHeaders["cookie"] = _cookie!;
 
-    return response.statusCode == 201 || response.statusCode == 200;
+    final response = await http.post(url, headers: postHeaders, body: body);
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['d']['Mblnr']?.toString();
+    } else {
+      throw Exception(_parseError(response.body));
+    }
   }
 
-  // =========================
-  // 4) GOODS ISSUE
-  // POST /GoodsMovementSet
-  // Bwart = 201
-  // =========================
-  Future<bool> postGoodsIssue({
+  Future<String?> postGoodsIssue({
     required String matnr,
     required String werks,
     required String lgort,
     required String menge,
   }) async {
+    await _fetchCsrfToken();
     final url = Uri.parse(
-      "${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}?\$format=json",
+      "${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}",
     );
-
     final body = json.encode({
       "Mblnr": "",
       "Bwart": "201",
@@ -198,28 +174,31 @@ class SapApiService {
       "Menge": menge.trim(),
     });
 
-    final response = await http.post(url, headers: headers, body: body);
+    final postHeaders = Map<String, String>.from(headers);
+    if (_csrfToken != null) postHeaders["x-csrf-token"] = _csrfToken!;
+    if (_cookie != null) postHeaders["cookie"] = _cookie!;
 
-    return response.statusCode == 201 || response.statusCode == 200;
+    final response = await http.post(url, headers: postHeaders, body: body);
+
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['d']['Mblnr']?.toString();
+    } else {
+      throw Exception(_parseError(response.body));
+    }
   }
 
-  // =========================
-  // 5) STOCK UPDATE
-  // PUT /StockUpdateSet
-  // =========================
   Future<bool> updateStock({
     required String matnr,
     required String werks,
     required String lgort,
     required String labst,
   }) async {
-    // OData PUT thường cần key trong URL
-    // Nếu key order của metadata khác thì sửa lại đúng thứ tự
+    await _fetchCsrfToken();
     final url = Uri.parse(
       "${ApiConstants.baseUrl}${ApiConstants.stockUpdateSet}"
-      "(Matnr='${matnr.trim()}',Werks='${werks.trim()}',Lgort='${lgort.trim()}')?\$format=json",
+      "(Matnr='${matnr.trim()}',Werks='${werks.trim()}',Lgort='${lgort.trim()}')",
     );
-
     final body = json.encode({
       "Matnr": matnr.trim(),
       "Werks": werks.trim(),
@@ -227,8 +206,21 @@ class SapApiService {
       "Labst": labst.trim(),
     });
 
-    final response = await http.put(url, headers: headers, body: body);
+    final putHeaders = Map<String, String>.from(headers);
+    if (_csrfToken != null) putHeaders["x-csrf-token"] = _csrfToken!;
+    if (_cookie != null) putHeaders["cookie"] = _cookie!;
 
+    final response = await http.put(url, headers: putHeaders, body: body);
     return response.statusCode == 200 || response.statusCode == 204;
+  }
+
+  String _parseError(String responseBody) {
+    try {
+      final data = jsonDecode(responseBody);
+      return data['error']?['message']?['value'] ??
+          "Unknown SAP Error: $responseBody";
+    } catch (_) {
+      return responseBody;
+    }
   }
 }

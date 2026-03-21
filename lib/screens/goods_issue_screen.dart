@@ -40,15 +40,15 @@ class _GoodsIssueScreenState extends State<GoodsIssueScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final success = await _apiService.postGoodsIssue(
+      final mblnr = await _apiService.postGoodsIssue(
         matnr: _matnrController.text,
         werks: _werksController.text,
         lgort: _lgortController.text,
         menge: _mengeController.text,
       );
 
-      if (success) {
-        _showMessage("Goods Issue thành công (Bwart = 201)");
+      if (mblnr != null) {
+        _showMessage("Goods Issue thành công (Mblnr = $mblnr)");
         _clearForm();
       } else {
         _showMessage("Goods Issue thất bại", isError: true);

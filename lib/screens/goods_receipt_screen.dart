@@ -40,15 +40,15 @@ class _GoodsReceiptScreenState extends State<GoodsReceiptScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final success = await _apiService.postGoodsReceipt(
+      final mblnr = await _apiService.postGoodsReceipt(
         matnr: _matnrController.text,
         werks: _werksController.text,
         lgort: _lgortController.text,
         menge: _mengeController.text,
       );
 
-      if (success) {
-        _showMessage("Goods Receipt thành công (Bwart = 101)");
+      if (mblnr != null) {
+        _showMessage("Goods Receipt thành công (Mblnr = $mblnr)");
         _clearForm();
       } else {
         _showMessage("Goods Receipt thất bại", isError: true);
