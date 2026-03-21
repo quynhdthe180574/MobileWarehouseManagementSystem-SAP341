@@ -13,10 +13,10 @@ class SapApiService {
       'Basic ${base64Encode(utf8.encode('$username:$password'))}';
 
   Map<String, String> get headers => {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Authorization": basicAuth,
-      };
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "Authorization": basicAuth,
+  };
 
   String? _csrfToken;
   String? _cookie;
@@ -70,15 +70,19 @@ class SapApiService {
   }
 
   // 2. Tìm kiếm Stock chuẩn OData (Server-side)
-  Future<List<StockModel>> fetchAllStocks({String? filter, int top = 500}) async {
+  Future<List<StockModel>> fetchAllStocks({
+    String? filter,
+    int top = 500,
+  }) async {
     final queryParams = {
       "\$format": "json",
       "\$top": top.toString(),
       if (filter != null) "\$filter": filter,
     };
 
-    final uri = Uri.parse("${ApiConstants.baseUrl}${ApiConstants.stockSet}")
-        .replace(queryParameters: queryParams);
+    final uri = Uri.parse(
+      "${ApiConstants.baseUrl}${ApiConstants.stockSet}",
+    ).replace(queryParameters: queryParams);
 
     final response = await http.get(uri, headers: headers);
 
@@ -98,9 +102,12 @@ class SapApiService {
     String lgort = '',
   }) async {
     final filters = <String>[];
-    if (matnr.trim().isNotEmpty) filters.add("Matnr eq '${matnr.trim().toUpperCase()}'");
-    if (werks.trim().isNotEmpty) filters.add("Werks eq '${werks.trim().toUpperCase()}'");
-    if (lgort.trim().isNotEmpty) filters.add("Lgort eq '${lgort.trim().toUpperCase()}'");
+    if (matnr.trim().isNotEmpty)
+      filters.add("Matnr eq '${matnr.trim().toUpperCase()}'");
+    if (werks.trim().isNotEmpty)
+      filters.add("Werks eq '${werks.trim().toUpperCase()}'");
+    if (lgort.trim().isNotEmpty)
+      filters.add("Lgort eq '${lgort.trim().toUpperCase()}'");
 
     final filterString = filters.isNotEmpty ? filters.join(" and ") : null;
     return fetchAllStocks(filter: filterString);
@@ -114,7 +121,9 @@ class SapApiService {
     required String menge,
   }) async {
     await _fetchCsrfToken();
-    final url = Uri.parse("${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}");
+    final url = Uri.parse(
+      "${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}",
+    );
     final body = json.encode({
       "Mblnr": "",
       "Bwart": "101",
@@ -146,7 +155,9 @@ class SapApiService {
     required String menge,
   }) async {
     await _fetchCsrfToken();
-    final url = Uri.parse("${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}");
+    final url = Uri.parse(
+      "${ApiConstants.baseUrl}${ApiConstants.goodsMovementSet}",
+    );
     final body = json.encode({
       "Mblnr": "",
       "Bwart": "201",
@@ -165,6 +176,38 @@ class SapApiService {
     if (response.statusCode == 201 || response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['d']['Mblnr']?.toString();
+    } else {
+      throw Exception(_parseError(response.body));
+    }
+  }
+
+  // 5. Cập nhật trực tiếp tồn kho (Stock Update)
+  Future<bool> updateStock({
+    required String matnr,
+    required String werks,
+    required String lgort,
+    required String labst,
+  }) async {
+    await _fetchCsrfToken();
+    final url = Uri.parse(
+      "${ApiConstants.baseUrl}${ApiConstants.stockUpdateSet}"
+      "(Matnr='${matnr.trim()}',Werks='${werks.trim()}',Lgort='${lgort.trim()}')",
+    );
+    final body = json.encode({
+      "Matnr": matnr.trim(),
+      "Werks": werks.trim(),
+      "Lgort": lgort.trim(),
+      "Labst": labst.trim(),
+    });
+
+    final putHeaders = Map<String, String>.from(headers);
+    if (_csrfToken != null) putHeaders["x-csrf-token"] = _csrfToken!;
+    if (_cookie != null) putHeaders["cookie"] = _cookie!;
+
+    final response = await http.put(url, headers: putHeaders, body: body);
+
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      return true;
     } else {
       throw Exception(_parseError(response.body));
     }
