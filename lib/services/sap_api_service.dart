@@ -80,47 +80,16 @@ class SapApiService {
   }
 
   // 2. Tìm kiếm Stock chuẩn OData (Server-side)
-  Future<List<StockModel>> fetchAllStocks({
-    String? filter,
-    int top = 500,
-  }) async {
-    final queryParams = {
-      "\$format": "json",
-      "\$top": top.toString(),
-      if (filter != null) "\$filter": filter,
-    };
-
-    final uri = Uri.parse(
-      "${ApiConstants.baseUrl}${ApiConstants.stockSet}",
-    ).replace(queryParameters: queryParams);
-
-    final response = await http.get(uri, headers: headers);
+  Future<List<dynamic>> getStocks() async {
+    final url = "${ApiConstants.baseUrl}/StockSet?\$format=json";
+    final response = await http.get(Uri.parse(url), headers: headers);
 
     if (response.statusCode == 200) {
-      final results = _parseODataResults(response.body);
-      return results
-          .map((e) => StockModel.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final data = jsonDecode(response.body);
+      return data["d"]["results"];
     } else {
       throw Exception("Failed to load stocks: ${response.statusCode}");
     }
-  }
-
-  Future<List<StockModel>> searchStock({
-    String matnr = '',
-    String werks = '',
-    String lgort = '',
-  }) async {
-    final filters = <String>[];
-    if (matnr.trim().isNotEmpty)
-      filters.add("Matnr eq '${_formatMatnr(matnr)}'");
-    if (werks.trim().isNotEmpty)
-      filters.add("Werks eq '${werks.trim().toUpperCase()}'");
-    if (lgort.trim().isNotEmpty)
-      filters.add("Lgort eq '${lgort.trim().toUpperCase()}'");
-
-    final filterString = filters.isNotEmpty ? filters.join(" and ") : null;
-    return fetchAllStocks(filter: filterString);
   }
 
   // 3. Nhập kho (Goods Receipt)

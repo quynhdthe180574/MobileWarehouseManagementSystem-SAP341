@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../models/stock_model.dart';
-import '../services/sap_api_service.dart';
+import 'package:mobile_warehouse_management/services/sap_api_service.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -11,232 +9,262 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
-  final SapApiService _apiService = SapApiService();
+  List stocks = [];
+  List filteredStocks = [];
 
-  final TextEditingController _matnrController = TextEditingController();
-  final TextEditingController _werksController = TextEditingController();
-  final TextEditingController _lgortController = TextEditingController();
+  bool isLoading = true;
 
-  List<StockModel> _stocks = [];
-  bool _isLoading = false;
-  String _errorMessage = '';
+  final TextEditingController searchController = TextEditingController();
+
+  String selectedPlant = "All";
+  String selectedStorage = "All";
 
   @override
   void initState() {
     super.initState();
-    _loadAllStocks();
+    loadStocks();
   }
 
-  @override
-  void dispose() {
-    _matnrController.dispose();
-    _werksController.dispose();
-    _lgortController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadAllStocks() async {
+  Future<void> loadStocks() async {
     setState(() {
-      _isLoading = true;
-      _errorMessage = '';
+      isLoading = true;
     });
 
     try {
-      final data = await _apiService.fetchAllStocks();
+      var data = await SapApiService().getStocks();
+
       setState(() {
-        _stocks = data;
+        stocks = data;
+        filteredStocks = data;
       });
     } catch (e) {
-      setState(() {
-        _errorMessage = "Load stocks failed:\n$e";
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      print(e);
     }
-  }
 
-  Future<void> _searchStock() async {
     setState(() {
-      _isLoading = true;
-      _errorMessage = '';
+      isLoading = false;
     });
-
-    try {
-      final data = await _apiService.searchStock(
-        matnr: _matnrController.text,
-        werks: _werksController.text,
-        lgort: _lgortController.text,
-      );
-
-      setState(() {
-        _stocks = data;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = "Search stock failed:\n$e";
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
   }
 
-  void _reset() {
-    _matnrController.clear();
-    _werksController.clear();
-    _lgortController.clear();
-    _loadAllStocks();
+  /// SEARCH + FILTER
+  void applyFilter() {
+    String query = searchController.text.toLowerCase();
+
+    var result = stocks.where((stock) {
+      final matnr = stock["Matnr"].toString().toLowerCase();
+      final werks = stock["Werks"].toString().toLowerCase();
+      final lgort = stock["Lgort"].toString().toLowerCase();
+
+      final matchesSearch =
+          matnr.contains(query) ||
+          werks.contains(query) ||
+          lgort.contains(query);
+
+      final matchesPlant =
+          selectedPlant == "All" || stock["Werks"] == selectedPlant;
+
+      final matchesStorage =
+          selectedStorage == "All" || stock["Lgort"] == selectedStorage;
+
+      return matchesSearch && matchesPlant && matchesStorage;
+    }).toList();
+
+    setState(() {
+      filteredStocks = result;
+    });
+  }
+
+  /// Lấy danh sách Plant
+  List<String> getPlantList() {
+    List<String> plants = stocks
+        .map((e) => e["Werks"].toString())
+        .toSet()
+        .toList();
+    plants.sort();
+    plants.insert(0, "All");
+    return plants;
+  }
+
+  /// Lấy danh sách Storage (phụ thuộc Plant)
+  List<String> getStorageList() {
+    var filtered = selectedPlant == "All"
+        ? stocks
+        : stocks.where((e) => e["Werks"] == selectedPlant);
+
+    List<String> storages = filtered
+        .map((e) => e["Lgort"].toString())
+        .toSet()
+        .toList();
+
+    storages.sort();
+    storages.insert(0, "All");
+    return storages;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Xem tồn kho theo kho")),
+      appBar: AppBar(title: const Text("Warehouse Stock"), centerTitle: true),
       body: Column(
         children: [
-          _buildSearchSection(),
-          const Divider(height: 1),
-          Expanded(child: _buildBody()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchSection() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          TextField(
-            controller: _matnrController,
-            decoration: InputDecoration(
-              labelText: "Material Number (Matnr)",
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _werksController,
-            decoration: InputDecoration(
-              labelText: "Plant (Werks)",
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _lgortController,
-            decoration: InputDecoration(
-              labelText: "Storage Location (Lgort)",
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _searchStock,
-                  icon: const Icon(Icons.search),
-                  label: const Text("Search"),
+          /// SEARCH
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            child: TextField(
+              controller: searchController,
+              onChanged: (value) => applyFilter(),
+              decoration: InputDecoration(
+                hintText: "Search material / plant / storage...",
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _reset,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text("Reset"),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_errorMessage.isNotEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            _errorMessage,
-            style: const TextStyle(color: Colors.red),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
-    }
-
-    if (_stocks.isEmpty) {
-      return const Center(child: Text("Không có dữ liệu tồn kho"));
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadAllStocks,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _stocks.length,
-        itemBuilder: (context, index) {
-          final item = _stocks[index];
-          return Card(
-            elevation: 3,
-            margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.matnr,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+          ),
+
+          /// FILTER
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                const Icon(Icons.filter_list),
+                const SizedBox(width: 10),
+
+                /// PLANT
+                const Text(
+                  "Plant:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+
+                DropdownButton<String>(
+                  value: selectedPlant,
+                  items: getPlantList().map((plant) {
+                    return DropdownMenuItem(value: plant, child: Text(plant));
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedPlant = value!;
+                      selectedStorage = "All"; // reset storage
+                    });
+                    applyFilter();
+                  },
+                ),
+
+                const SizedBox(width: 16),
+
+                /// STORAGE
+                const Text(
+                  "Storage:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+
+                DropdownButton<String>(
+                  value: selectedStorage,
+                  items: getStorageList().map((storage) {
+                    return DropdownMenuItem(
+                      value: storage,
+                      child: Text(storage),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      selectedStorage = value!;
+                    });
+                    applyFilter();
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          /// LIST
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: loadStocks,
+                    child: filteredStocks.isEmpty
+                        ? const Center(
+                            child: Text(
+                              "No stock found",
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: filteredStocks.length,
+                            itemBuilder: (context, index) {
+                              var stock = filteredStocks[index];
+
+                              double qty =
+                                  double.tryParse(stock["Labst"].toString()) ??
+                                  0;
+
+                              Color stockColor = qty == 0
+                                  ? Colors.red
+                                  : Colors.green;
+
+                              return Card(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                elevation: 3,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ListTile(
+                                  leading: const CircleAvatar(
+                                    backgroundColor: Colors.blue,
+                                    child: Icon(
+                                      Icons.inventory,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    "Material ${stock["Matnr"]}",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text("Plant: ${stock["Werks"]}"),
+                                      Text("Storage: ${stock["Lgort"]}"),
+                                    ],
+                                  ),
+                                  trailing: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text(
+                                        "Stock",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                      Text(
+                                        qty.toStringAsFixed(0),
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: stockColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                   ),
-                  const SizedBox(height: 10),
-                  _infoRow("Plant", item.werks),
-                  _infoRow("Storage", item.lgort),
-                  _infoRow("Stock Qty", item.labst),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              "$label:",
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
           ),
-          Expanded(child: Text(value.isEmpty ? "-" : value)),
         ],
       ),
     );
