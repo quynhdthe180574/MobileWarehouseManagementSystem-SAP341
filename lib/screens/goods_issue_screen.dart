@@ -37,11 +37,12 @@ class _GoodsIssueScreenState extends State<GoodsIssueScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final mblnr = await _apiService.postGoodsIssue(
+      final mblnr = await _apiService.postGoodsMovement(
         matnr: _matnrController.text,
         werks: _werksController.text,
         lgort: _lgortController.text,
         menge: _mengeController.text,
+        bwart: '201',
       );
 
       if (mblnr != null) {
@@ -55,7 +56,10 @@ class _GoodsIssueScreenState extends State<GoodsIssueScreen> {
         _showMessage("Xuất kho thất bại", isError: true);
       }
     } catch (e) {
-      _showMessage("${e.toString().replaceAll("Exception: ", "")}", isError: true);
+      _showMessage(
+        "${e.toString().replaceAll("Exception: ", "")}",
+        isError: true,
+      );
     } finally {
       setState(() => _isLoading = false);
     }

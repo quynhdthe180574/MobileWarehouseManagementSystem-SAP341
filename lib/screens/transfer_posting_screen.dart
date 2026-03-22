@@ -2,20 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../services/sap_api_service.dart';
 
-class StockUpdateScreen extends StatefulWidget {
-  const StockUpdateScreen({super.key});
+class TransferPostingScreen extends StatefulWidget {
+  const TransferPostingScreen({super.key});
 
   @override
-  State<StockUpdateScreen> createState() => _StockUpdateScreenState();
+  State<TransferPostingScreen> createState() => _TransferPostingScreenState();
 }
 
-class _StockUpdateScreenState extends State<StockUpdateScreen> {
+class _TransferPostingScreenState extends State<TransferPostingScreen> {
   final SapApiService _apiService = SapApiService();
 
   final TextEditingController _matnrController = TextEditingController();
   final TextEditingController _werksController = TextEditingController();
-  final TextEditingController _lgortController = TextEditingController();
-  final TextEditingController _labstController = TextEditingController();
+  final TextEditingController _lgortFromController = TextEditingController();
+  final TextEditingController _lgortToController = TextEditingController();
+  final TextEditingController _mengeController = TextEditingController();
 
   bool _isLoading = false;
 
@@ -23,43 +24,54 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
   void dispose() {
     _matnrController.dispose();
     _werksController.dispose();
-    _lgortController.dispose();
-    _labstController.dispose();
+    _lgortFromController.dispose();
+    _lgortToController.dispose();
+    _mengeController.dispose();
     super.dispose();
   }
 
-  Future<void> _updateStock() async {
+  Future<void> _submitTransfer() async {
     final matnr = _matnrController.text.trim();
     final werks = _werksController.text.trim();
-    final lgort = _lgortController.text.trim();
-    final labst = _labstController.text.trim();
+    final lgortFrom = _lgortFromController.text.trim();
+    final lgortTo = _lgortToController.text.trim();
+    final menge = _mengeController.text.trim();
 
-    if (matnr.isEmpty || werks.isEmpty || lgort.isEmpty || labst.isEmpty) {
+    if (matnr.isEmpty ||
+        werks.isEmpty ||
+        lgortFrom.isEmpty ||
+        lgortTo.isEmpty ||
+        menge.isEmpty) {
       _showMessage("Vui lòng nhập đầy đủ thông tin", isError: true);
       return;
     }
 
-    // Kiểm tra cơ bản số lượng
-    if (double.tryParse(labst) == null) {
-      _showMessage("Số lượng tồn phải là số hợp lệ", isError: true);
+    if (lgortFrom == lgortTo) {
+      _showMessage("Kho nguồn và kho đích phải khác nhau", isError: true);
+      return;
+    }
+
+    if (double.tryParse(menge) == null || double.parse(menge) <= 0) {
+      _showMessage("Số lượng phải là số dương", isError: true);
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      final success = await _apiService.updateStock(
+      final success = await _apiService.postTransferPosting(
         matnr: matnr,
         werks: werks,
-        lgort: lgort,
-        labst: labst,
+        lgortFrom: lgortFrom,
+        lgortTo: lgortTo,
+        menge: menge,
       );
 
       if (success) {
-        _showMessage("Cập nhật tồn kho thành công", isError: false);
+        _showMessage("Chuyển kho thành công (Movement Type 311)");
         _clearForm();
       } else {
-        _showMessage("Cập nhật tồn kho thất bại", isError: true);
+        _showMessage("Chuyển kho thất bại", isError: true);
       }
     } catch (e) {
       _showMessage("Lỗi: $e", isError: true);
@@ -71,8 +83,9 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
   void _clearForm() {
     _matnrController.clear();
     _werksController.clear();
-    _lgortController.clear();
-    _labstController.clear();
+    _lgortFromController.clear();
+    _lgortToController.clear();
+    _mengeController.clear();
   }
 
   void _showMessage(String message, {bool isError = false}) {
@@ -80,7 +93,6 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.red : Colors.green,
-        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -88,7 +100,7 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Cập nhật số lượng tồn")),
+      appBar: AppBar(title: const Text("Chuyển kho (Transfer Posting)")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -99,11 +111,16 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
             const SizedBox(height: 16),
             _buildTextField(_werksController, "Plant (Werks)"),
             const SizedBox(height: 16),
-            _buildTextField(_lgortController, "Storage Location (Lgort)"),
+            _buildTextField(
+              _lgortFromController,
+              "Từ Storage Location (Lgort)",
+            ),
+            const SizedBox(height: 16),
+            _buildTextField(_lgortToController, "Đến Storage Location (Lgort)"),
             const SizedBox(height: 16),
             _buildTextField(
-              _labstController,
-              "New Stock Quantity (Labst)",
+              _mengeController,
+              "Quantity (Menge)",
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
@@ -113,13 +130,13 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _updateStock,
-                icon: const Icon(Icons.save_outlined),
+                onPressed: _isLoading ? null : _submitTransfer,
+                icon: const Icon(Icons.swap_horiz),
                 label: Text(
-                  _isLoading ? "Đang xử lý..." : "Cập nhật tồn kho",
+                  _isLoading ? "Đang xử lý..." : "Thực hiện chuyển kho",
                   style: const TextStyle(fontSize: 16),
                 ),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
               ),
             ),
           ],
@@ -130,7 +147,7 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
 
   Widget _buildHeaderCard() {
     return Card(
-      color: Colors.purple.withOpacity(0.08),
+      color: Colors.teal.withOpacity(0.08),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -138,13 +155,13 @@ class _StockUpdateScreenState extends State<StockUpdateScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
             Text(
-              "PUT /StockUpdateSet",
+              "Movement Type: 311",
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             SizedBox(height: 8),
             Text(
-              "Điều chỉnh trực tiếp số lượng tồn kho (Labst).\n"
-              "Chỉ dùng khi cần hiệu chỉnh thủ công (không qua movement).",
+              "Chuyển vật liệu giữa các kho trong cùng một nhà máy (Plant).\n"
+              "Không thay đổi tổng tồn kho toàn plant.",
               style: TextStyle(color: Colors.grey),
             ),
           ],

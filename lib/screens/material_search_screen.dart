@@ -14,14 +14,18 @@ class _MaterialSearchScreenState extends State<MaterialSearchScreen> {
   final SapApiService _apiService = SapApiService();
   final TextEditingController _matnrController = TextEditingController();
 
-  // Danh sach goc lay tu SAP
   List<MaterialModel> _allMaterials = [];
-
-  // Danh sach hien thi tren man hinh
   List<MaterialModel> _materials = [];
 
   bool _isLoading = false;
   String _errorMessage = '';
+
+  // Filter dropdown giống ABAP
+  String? _selectedMtart;
+  String? _selectedMeins;
+
+  List<String> _mtartOptions = [];
+  List<String> _meinsOptions = [];
 
   @override
   void initState() {
@@ -47,6 +51,10 @@ class _MaterialSearchScreenState extends State<MaterialSearchScreen> {
       setState(() {
         _allMaterials = data;
         _materials = data;
+
+        // Lấy unique options cho dropdown filter
+        _mtartOptions = _allMaterials.map((e) => e.mtart).toSet().toList();
+        _meinsOptions = _allMaterials.map((e) => e.meins).toSet().toList();
       });
     } catch (e) {
       setState(() {
@@ -61,6 +69,7 @@ class _MaterialSearchScreenState extends State<MaterialSearchScreen> {
     }
   }
 
+  // Search + filter như ABAP
   Future<void> _searchMaterial() async {
     final keyword = _matnrController.text.trim().toLowerCase();
 
@@ -68,34 +77,33 @@ class _MaterialSearchScreenState extends State<MaterialSearchScreen> {
       _errorMessage = '';
     });
 
-    // Neu o search rong thi hien lai tat ca
-    if (keyword.isEmpty) {
-      setState(() {
-        _materials = _allMaterials;
-      });
-      return;
-    }
-
-    // Search local tren danh sach da load
     final filtered = _allMaterials.where((item) {
-      return item.matnr.toLowerCase().contains(keyword) ||
+      final matchesKeyword =
+          keyword.isEmpty ||
+          item.matnr.toLowerCase().contains(keyword) ||
           item.mtart.toLowerCase().contains(keyword) ||
           item.meins.toLowerCase().contains(keyword);
+
+      final matchesMtart =
+          _selectedMtart == null || item.mtart == _selectedMtart;
+      final matchesMeins =
+          _selectedMeins == null || item.meins == _selectedMeins;
+
+      return matchesKeyword && matchesMtart && matchesMeins;
     }).toList();
 
     setState(() {
       _materials = filtered;
-    });
-
-    if (filtered.isEmpty) {
-      setState(() {
+      if (filtered.isEmpty) {
         _errorMessage = "Khong tim thay Material phu hop";
-      });
-    }
+      }
+    });
   }
 
   void _reset() {
     _matnrController.clear();
+    _selectedMtart = null;
+    _selectedMeins = null;
 
     setState(() {
       _errorMessage = '';
@@ -133,7 +141,39 @@ class _MaterialSearchScreenState extends State<MaterialSearchScreen> {
               ),
             ),
             textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _searchMaterial(),
+            onChanged: (_) => _searchMaterial(),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _selectedMtart,
+                  decoration: const InputDecoration(
+                    labelText: "Material Type (Mtart)",
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _mtartOptions
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedMtart = v),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _selectedMeins,
+                  decoration: const InputDecoration(
+                    labelText: "Base Unit (Meins)",
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _meinsOptions
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedMeins = v),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Row(
@@ -161,9 +201,7 @@ class _MaterialSearchScreenState extends State<MaterialSearchScreen> {
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
 
     if (_errorMessage.isNotEmpty && _materials.isEmpty) {
       return Center(
@@ -178,9 +216,8 @@ class _MaterialSearchScreenState extends State<MaterialSearchScreen> {
       );
     }
 
-    if (_materials.isEmpty) {
+    if (_materials.isEmpty)
       return const Center(child: Text("Khong co du lieu Material"));
-    }
 
     return RefreshIndicator(
       onRefresh: _loadAllMaterials,
